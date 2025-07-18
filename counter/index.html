@@ -8,8 +8,8 @@
     <style>
       @font-face {
         font-family: "Druk Wide Cy Web";
-        src: url("/fonts/DrukWideCyWeb-Regular.woff2") format("woff2"),
-             url("/fonts/DrukWideCyWeb-Regular.woff") format("woff");
+        src: url("DrukWideCyWeb-Regular.woff2") format("woff2"),
+             url("DrukWideCyWeb-Regular.woff") format("woff");
         font-weight: normal;
         font-style: normal;
         font-display: swap;
@@ -20,7 +20,7 @@
         margin: 0;
         padding: 0;
         height: 100%;
-        background: #000;
+        background: transparent; /* прозрачно для оверлея */
         overflow: hidden;
       }
       body {
@@ -32,7 +32,7 @@
       /* Counter styles */
       #counter {
         font-family: "Druk Wide Cy Web", sans-serif;
-        color: #fff;
+        color: #ffffff;
         font-size: 10vw; /* scales with viewport width */
         line-height: 1;
         user-select: none;
