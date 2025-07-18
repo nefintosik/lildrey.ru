@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Счётчик фолловеров</title>
+  <title>Twitch follower counter</title>
 
   <style>
     @font-face {
@@ -52,8 +52,8 @@
 
   <script>
     const userLogin = "lildrey999";
-    const refreshIntervalMs = 1000; // 1 секунда
-    const apiUrl = `https://decapi.me/twitch/followcount/${userLogin}`; // более быстрый поддомен
+    const refreshIntervalMs = 100; // 100 мс
+    const apiUrlBase = `https://decapi.me/twitch/followcount/${userLogin}`;
 
     const wrapper = document.getElementById("counter-wrapper");
     let currentEl = document.getElementById("counter");
@@ -61,13 +61,16 @@
 
     async function fetchFollowerCount(){
       try{
-        const resp = await fetch(apiUrl,{cache:"no-store"});
+        // добавляем одноразовый query‑param, чтобы браузер точно не кешировал
+        const url = `${apiUrlBase}?_=${Date.now()}`;
+        const resp = await fetch(url,{cache:"no-store"});
         const txt = await resp.text();
         return parseInt(txt.trim(),10);
       }catch(e){
         console.error(e);
         return null;
       }
+    }
     }
 
     function formatCounter(cnt){
