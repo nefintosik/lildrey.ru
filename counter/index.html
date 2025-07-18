@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Follower Counter</title>
+
+    <style>
+      @font-face {
+        font-family: "Druk Wide Cy Web";
+        src: url("/fonts/DrukWideCyWeb-Regular.woff2") format("woff2"),
+             url("/fonts/DrukWideCyWeb-Regular.woff") format("woff");
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      /* Reset & layout */
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Counter styles */
+      #counter {
+        font-family: "Druk Wide Cy Web", sans-serif;
+        color: #fff;
+        font-size: 10vw; /* scales with viewport width */
+        line-height: 1;
+        user-select: none;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="counter">0/100</div>
+
+    <script>
+      // ==================== CONFIGURATION ====================
+      const userLogin = "lildrey999";              // Twitch логин стримера
+      const refreshIntervalMs = 60_000;            // как часто обновлять (мс)
+      const apiUrl = `https://decapi.me/twitch/followcount/${userLogin}`; // публичный API, не требует токенов
+      // =======================================================
+
+      // Получаем число фолловеров от DecAPI
+      async function fetchFollowerCount() {
+        try {
+          const res = await fetch(apiUrl, { cache: "no-store" });
+          const text = await res.text();
+          return Number(text.trim().replace(/[^0-9]/g, ""));
+        } catch (err) {
+          console.error(err);
+          return null;
+        }
+      }
+
+      // Формируем строку «текущее/ближайшее кратное 100»
+      function formatCounter(count) {
+        if (count === null) return "--/--";
+        let next = Math.ceil(count / 100) * 100;
+        if (count % 100 === 0) {
+          next = count + 100;
+        }
+        return `${count}/${next}`;
+      }
+
+      // Обновление счётчика
+      async function updateCounter() {
+        const count = await fetchFollowerCount();
+        document.getElementById("counter").textContent = formatCounter(count);
+      }
+
+      // Первая отрисовка + периодическое обновление
+      updateCounter();
+      setInterval(updateCounter, refreshIntervalMs);
+    </script>
+  </body>
+</html>
