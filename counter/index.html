@@ -1,223 +1,139 @@
 <!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Follower Counter</title>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Twitch follower counter</title>
 
-    <style>
-      @font-face {
-        font-family: "Druk Wide Cy Web";
-        src: url("Druk Wide Cy Web Bold Regular.woff2") format("woff2"),
-             url("Druk Wide Cy Web Bold Regular.woff") format("woff");
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
+  <style>
+    @font-face {
+      font-family: "Druk Wide Cy Web";
+      src: url("Druk Wide Cy Web Bold Regular.woff2") format("woff2"),
+           url("Druk Wide Cy Web Bold Regular.woff")  format("woff");
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+  </style>
+
+  <style>
+    :root {
+      --anim-duration: 0.35s;
+    }
+    html,body {
+      margin:0; padding:0;
+      background: transparent;           /* полностью прозрачный фон */
+      overflow:hidden;
+    }
+    #counter-wrapper{
+      position:relative;
+      display:inline-block;
+      overflow:hidden;                  /* прячет выезжающие цифры */
+    }
+    .counter-text{
+      font-family:"Druk Wide Cy Web",sans-serif;
+      font-size:10vw;                   /* подгоните под OBS при желании */
+      line-height:1;
+      color:#ffffff;
+      white-space:nowrap;
+      text-shadow:
+        0 0 6px rgba(0,0,0,.9),
+        0 0 12px rgba(0,0,0,.8),
+        0 0 18px rgba(0,0,0,.7);
+      will-change:transform;
+      font-variant-numeric:tabular-nums; /* если гарнитура поддерживает */
+    }
+
+    /* Ключевые кадры */
+    @keyframes slide-up-out   { to { transform:translateY(-100%); opacity:0; } }
+    @keyframes slide-up-in    { from{ transform:translateY(100%);} to{ transform:translateY(0);} }
+    @keyframes slide-down-out { to { transform:translateY(100%);  opacity:0; } }
+    @keyframes slide-down-in  { from{ transform:translateY(-100%);}to{ transform:translateY(0);} }
+
+    .anim-up-out   { animation:slide-up-out   var(--anim-duration) ease forwards; }
+    .anim-up-in    { animation:slide-up-in    var(--anim-duration) ease forwards; }
+    .anim-down-out { animation:slide-down-out var(--anim-duration) ease forwards; }
+    .anim-down-in  { animation:slide-down-in  var(--anim-duration) ease forwards; }
+  </style>
+</head>
+<body>
+  <div id="counter-wrapper">
+    <div id="counter" class="counter-text">---/----</div>
+  </div>
+
+  <script>
+    const userLogin          = "lildrey999";
+    const refreshIntervalMs  = 15_000;       // 15 секунд
+    const decapiUrl          = `https://r.decapi.me/twitch/followcount/${userLogin}`;
+
+    const wrapper   = document.getElementById("counter-wrapper");
+    let   currentEl = document.getElementById("counter");
+    let   current   = null;                  // предыдущее число
+
+    /* запрашиваем число у r.decapi.me */
+    async function fetchFollowerCount(){
+      try{
+        const r = await fetch(decapiUrl,{cache:"no-store"});
+        const txt = await r.text();
+        return parseInt(txt.trim(),10);
+      }catch(e){
+        console.error("DecAPI error:",e);
+        return null;
       }
+    }
 
-      /* Reset & layout */
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        background: transparent; /* прозрачно для оверлея */
-        overflow: hidden;
+    /* формат "текущее/следующее кратное 100" */
+    function format(count){
+      const next = Math.ceil((count+1)/100)*100;
+      return `${count}/${next}`;
+    }
+
+    /* анимируем смену числа: всё смещение одной строкой */
+    function animateChange(newText, increment){
+      const outgoing = currentEl;
+
+      /* фиксируем текущую ширину, чтобы контейнер не «сжимался» */
+      const w = outgoing.offsetWidth;
+      wrapper.style.width = w + "px";
+
+      const incoming = document.createElement("div");
+      incoming.className = `counter-text ${increment ? "anim-up-in" : "anim-down-in"}`;
+      incoming.textContent = newText;
+      incoming.style.position = "absolute";
+      incoming.style.left = 0;
+      incoming.style.top  = 0;
+
+      outgoing.classList.add(increment ? "anim-up-out" : "anim-down-out");
+      wrapper.appendChild(incoming);
+      currentEl = incoming;
+
+      outgoing.addEventListener("animationend", () => {
+        outgoing.remove();
+        wrapper.style.width = "";         // снимаем фикс
+      }, { once:true });
+    }
+
+    /* получаем первое значение + ставим интервал */
+    async function init(){
+      const first = await fetchFollowerCount();
+      if(first!=null){
+        current = first;
+        currentEl.textContent = format(first);
       }
-      body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+      setInterval(updateCount, refreshIntervalMs);
+    }
 
-      /* Counter styles */
-      #counter {
-        font-family: "Druk Wide Cy Web", sans-serif;
-        color: #ffffff;
-        font-size: 10vw; /* scales with viewport width */
-        line-height: 1;
-        user-select: none;
-        white-space: nowrap;
-        text-shadow:
-          0 0 6px rgba(0, 0, 0, 0.9),
-          0 0 12px rgba(0, 0, 0, 0.8),
-          0 0 18px rgba(0, 0, 0, 0.7);
-      }
-      .digit {
-        display: inline-block;
-      }
+    async function updateCount(){
+      const cnt = await fetchFollowerCount();
+      if(cnt==null || cnt===current) return;
 
-      /* Animations */
-      @keyframes slide-up-in {
-        0% {
-          transform: translateY(100%);
-          opacity: 0;
-        }
-        100% {
-          transform: translateY(0);
-          opacity: 1;
-        }
-      }
-      @keyframes slide-up-out {
-        0% {
-          transform: translateY(0);
-          opacity: 1;
-        }
-        100% {
-          transform: translateY(-100%);
-          opacity: 0;
-        }
-      }
-      @keyframes slide-down-in {
-        0% {
-          transform: translateY(-100%);
-          opacity: 0;
-        }
-        100% {
-          transform: translateY(0);
-          opacity: 1;
-        }
-      }
-      @keyframes slide-down-out {
-        0% {
-          transform: translateY(0);
-          opacity: 1;
-        }
-        100% {
-          transform: translateY(100%);
-          opacity: 0;
-        }
-      }
+      const inc = cnt > current;
+      animateChange(format(cnt), inc);
+      current = cnt;
+    }
 
-      .slide-up-in {
-        animation: slide-up-in 0.35s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-      }
-      .slide-up-out {
-        animation: slide-up-out 0.35s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-      }
-      .slide-down-in {
-        animation: slide-down-in 0.35s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-      }
-      .slide-down-out {
-        animation: slide-down-out 0.35s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="counter"></div>
-
-    <script>
-      // ==================== CONFIGURATION ====================
-      const userLogin = "lildrey999"; // Twitch логин стримера
-      const refreshIntervalMs = 15_000; // обновлять каждые 15 секунд
-      const apiUrl = `https://decapi.me/twitch/followcount/${userLogin}`; // публичный API, не требует токенов
-      // =======================================================
-
-      let prevFormatted = null; // предыдущая строка «3021/3100»
-      let prevCountNumeric = null; // предыдущее числовое значение фолловеров
-
-      const counterEl = document.getElementById("counter");
-
-      // Создаёт span для символа
-      function createSpan(char) {
-        const span = document.createElement("span");
-        span.textContent = char;
-        span.className = "digit";
-        return span;
-      }
-
-      // Инициализация при первом запуске
-      function initialRender(formatted) {
-        counterEl.innerHTML = "";
-        [...formatted].forEach((ch) => counterEl.appendChild(createSpan(ch)));
-      }
-
-      // Анимация изменения цифр
-      function animateTo(formatted, isIncrement) {
-        const spans = [...counterEl.childNodes];
-        const maxLen = Math.max(spans.length, formatted.length);
-
-        for (let i = 0; i < maxLen; i++) {
-          const oldSpan = spans[i] || null;
-          const newChar = formatted[i] || "";
-
-          if (!oldSpan) {
-            // добавлена новая позиция (длина выросла)
-            const newSpan = createSpan(newChar);
-            newSpan.classList.add(isIncrement ? "slide-up-in" : "slide-down-in");
-            counterEl.appendChild(newSpan);
-            continue;
-          }
-
-          if (oldSpan.textContent === newChar) {
-            // символ не меняется — оставляем без анимации
-            continue;
-          }
-
-          // Заменяем символ с анимацией
-          const outgoingClass = isIncrement ? "slide-up-out" : "slide-down-out";
-          const incomingClass = isIncrement ? "slide-up-in" : "slide-down-in";
-
-          const newSpan = createSpan(newChar);
-          newSpan.classList.add(incomingClass);
-
-          oldSpan.classList.add(outgoingClass);
-          oldSpan.addEventListener(
-            "animationend",
-            () => {
-              // удаляем старый span после завершения анимации
-              if (oldSpan.parentNode) oldSpan.parentNode.removeChild(oldSpan);
-            },
-            { once: true }
-          );
-
-          counterEl.insertBefore(newSpan, oldSpan.nextSibling);
-        }
-      }
-
-      // Получаем число фолловеров от DecAPI
-      async function fetchFollowerCount() {
-        try {
-          const res = await fetch(apiUrl, { cache: "no-store" });
-          const text = await res.text();
-          return Number(text.trim().replace(/[^0-9]/g, ""));
-        } catch (err) {
-          console.error(err);
-          return null;
-        }
-      }
-
-      // Формируем строку «текущее/ближайшее кратное 100»
-      function formatCounter(count) {
-        if (count === null) return "--/--";
-        let next = Math.ceil(count / 100) * 100;
-        if (count % 100 === 0) {
-          next = count + 100;
-        }
-        return `${count}/${next}`;
-      }
-
-      // Обновление счётчика
-      async function updateCounter() {
-        const count = await fetchFollowerCount();
-        if (count === null) return;
-        const formatted = formatCounter(count);
-
-        if (prevFormatted === null) {
-          // первое отображение
-          initialRender(formatted);
-        } else if (formatted !== prevFormatted) {
-          const isIncrement = count > prevCountNumeric;
-          animateTo(formatted, isIncrement);
-        }
-
-        prevFormatted = formatted;
-        prevCountNumeric = count;
-      }
-
-      // Первая отрисовка + периодическое обновление
-      updateCounter();
-      setInterval(updateCounter, refreshIntervalMs);
-    </script>
-  </body>
+    init();
+  </script>
+</body>
 </html>
