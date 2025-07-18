@@ -2,7 +2,6 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Счётчик фолловеров</title>
 
@@ -15,125 +14,102 @@
       font-style: normal;
       font-display: swap;
     }
-  </style>
 
-  <style>
-    :root {
-      --anim-duration: 0.35s;
-    }
-    html,body {
-      margin:0; padding:0;
-      background: transparent;           /* полностью прозрачный фон */
-      overflow:hidden;
-    }
-    #counter-wrapper{
-      position:relative;
-      display:inline-block;
-      overflow:hidden;                  /* прячет выезжающие цифры */
-    }
+    /* Layout */
+    html,body{margin:0;padding:0;background:transparent;overflow:hidden}
+    body{display:flex;align-items:center;justify-content:center;height:100%}
+
+    /* Wrapper keeps element positioned; overflow visible so shadow не обрезается */
+    #counter-wrapper{position:relative;display:inline-block}
+
     .counter-text{
       font-family:"Druk Wide Cy Web",sans-serif;
-      font-size:10vw;                   /* подгоните под OBS при желании */
+      font-size:10vw;
       line-height:1;
-      color:#ffffff;
       white-space:nowrap;
-      text-shadow:
-        0 0 6px rgba(0,0,0,.9),
-        0 0 12px rgba(0,0,0,.8),
-        0 0 18px rgba(0,0,0,.7);
+      color:#fff;
+      text-shadow:0 0 6px rgba(0,0,0,.9),0 0 12px rgba(0,0,0,.8),0 0 18px rgba(0,0,0,.7);
       will-change:transform;
-      font-variant-numeric:tabular-nums; /* если гарнитура поддерживает */
+      font-variant-numeric:tabular-nums;
     }
 
-    /* Ключевые кадры */
-    @keyframes slide-up-out   { to { transform:translateY(-100%); opacity:0; } }
-    @keyframes slide-up-in    { from{ transform:translateY(100%);} to{ transform:translateY(0);} }
-    @keyframes slide-down-out { to { transform:translateY(100%);  opacity:0; } }
-    @keyframes slide-down-in  { from{ transform:translateY(-100%);}to{ transform:translateY(0);} }
+    /* Animations */
+    @keyframes slide-up-out{to{transform:translateY(-100%);opacity:0}}
+    @keyframes slide-up-in{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    @keyframes slide-down-out{to{transform:translateY(100%);opacity:0}}
+    @keyframes slide-down-in{from{transform:translateY(-100%)}to{transform:translateY(0)}}
 
-    .anim-up-out   { animation:slide-up-out   var(--anim-duration) ease forwards; }
-    .anim-up-in    { animation:slide-up-in    var(--anim-duration) ease forwards; }
-    .anim-down-out { animation:slide-down-out var(--anim-duration) ease forwards; }
-    .anim-down-in  { animation:slide-down-in  var(--anim-duration) ease forwards; }
+    .anim-up-out{animation:slide-up-out .3s ease forwards}
+    .anim-up-in{animation:slide-up-in .3s ease forwards}
+    .anim-down-out{animation:slide-down-out .3s ease forwards}
+    .anim-down-in{animation:slide-down-in .3s ease forwards}
   </style>
 </head>
 <body>
   <div id="counter-wrapper">
-    <div id="counter" class="counter-text">---/----</div>
+    <div id="counter" class="counter-text">--/--</div>
   </div>
 
   <script>
-    const userLogin          = "lildrey999";
-    const refreshIntervalMs  = 1_000;       // 1 секунда
-    const decapiUrl          = `https://decapi.me/twitch/followcount/${userLogin}`;
+    const userLogin = "lildrey999";
+    const refreshIntervalMs = 1000; // 1 секунда
+    const apiUrl = `https://decapi.me/twitch/followcount/${userLogin}`; // более быстрый поддомен
 
-    const wrapper   = document.getElementById("counter-wrapper");
-    let   currentEl = document.getElementById("counter");
-    let   current   = null;                  // предыдущее число
+    const wrapper = document.getElementById("counter-wrapper");
+    let currentEl = document.getElementById("counter");
+    let prevCount = null;
 
-    /* запрашиваем число у decapi.me */
     async function fetchFollowerCount(){
       try{
-        const r = await fetch(decapiUrl,{cache:"no-store"});
-        const txt = await r.text();
+        const resp = await fetch(apiUrl,{cache:"no-store"});
+        const txt = await resp.text();
         return parseInt(txt.trim(),10);
       }catch(e){
-        console.error("DecAPI error:",e);
+        console.error(e);
         return null;
       }
     }
 
-    /* формат "текущее/следующее кратное 100" */
-    function format(count){
-      const next = Math.ceil((count+1)/100)*100;
-      return `${count}/${next}`;
+    function formatCounter(cnt){
+      if(cnt===null) return "--/--";
+      const next = cnt%100===0?cnt+100:Math.ceil(cnt/100)*100;
+      return `${cnt}/${next}`;
     }
 
-    /* анимируем смену числа: всё смещение одной строкой */
     function animateChange(newText, increment){
       const outgoing = currentEl;
-
-      /* фиксируем текущую ширину, чтобы контейнер не «сжимался» */
-      const w = outgoing.offsetWidth;
-      wrapper.style.width = w + "px";
-
       const incoming = document.createElement("div");
-      incoming.className = `counter-text ${increment ? "anim-up-in" : "anim-down-in"}`;
+      incoming.className = `counter-text ${increment?"anim-up-in":"anim-down-in"}`;
       incoming.textContent = newText;
-      incoming.style.position = "absolute";
-      incoming.style.left = 0;
-      incoming.style.top  = 0;
+      incoming.style.position="absolute";
+      incoming.style.left=0;
+      incoming.style.top=0;
 
-      outgoing.classList.add(increment ? "anim-up-out" : "anim-down-out");
+      outgoing.classList.add(increment?"anim-up-out":"anim-down-out");
+
       wrapper.appendChild(incoming);
       currentEl = incoming;
 
-      outgoing.addEventListener("animationend", () => {
+      outgoing.addEventListener("animationend",()=>{
         outgoing.remove();
-        wrapper.style.width = "";         // снимаем фикс
-      }, { once:true });
+      },{once:true});
     }
 
-    /* получаем первое значение + ставим интервал */
-    async function init(){
-      const first = await fetchFollowerCount();
-      if(first!=null){
-        current = first;
-        currentEl.textContent = format(first);
-      }
-      setInterval(updateCount, refreshIntervalMs);
-    }
-
-    async function updateCount(){
+    async function update(){
       const cnt = await fetchFollowerCount();
-      if(cnt==null || cnt===current) return;
+      if(cnt===null) return;
+      const formatted = formatCounter(cnt);
 
-      const inc = cnt > current;
-      animateChange(format(cnt), inc);
-      current = cnt;
+      if(prevCount===null){
+        currentEl.textContent = formatted;
+      }else if(cnt!==prevCount){
+        animateChange(formatted,cnt>prevCount);
+      }
+      prevCount = cnt;
     }
 
-    init();
+    update();
+    setInterval(update,refreshIntervalMs);
   </script>
 </body>
 </html>
