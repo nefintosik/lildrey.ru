@@ -1,118 +1,193 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Twitch follower counter</title>
-
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Follower Counter</title>
   <style>
     @font-face {
-      font-family: "Druk Wide Cy Web";
-      src: url("Druk Wide Cy Web Bold Regular.woff2") format("woff2"),
-           url("Druk Wide Cy Web Bold Regular.woff")  format("woff");
+      font-family: 'Druk Wide Cy Web';
+      src: url('./Druk Wide Cy Web Bold Regular.woff') format('woff');
       font-weight: normal;
       font-style: normal;
       font-display: swap;
     }
 
-    /* Layout */
-    html,body{margin:0;padding:0;background:transparent;overflow:hidden}
-    body{display:flex;align-items:center;justify-content:center;height:100%}
-
-    /* Wrapper keeps element positioned; overflow visible so shadow не обрезается */
-    #counter-wrapper{position:relative;display:inline-block}
-
-    .counter-text{
-      font-family:"Druk Wide Cy Web",sans-serif;
-      font-size:10vw;
-      line-height:1;
-      white-space:nowrap;
-      color:#fff;
-      text-shadow:0 0 6px rgba(0,0,0,.9),0 0 12px rgba(0,0,0,.8),0 0 18px rgba(0,0,0,.7);
-      will-change:transform;
-      font-variant-numeric:tabular-nums;
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    /* Animations */
-    @keyframes slide-up-out{to{transform:translateY(-100%);opacity:0}}
-    @keyframes slide-up-in{from{transform:translateY(100%)}to{transform:translateY(0)}}
-    @keyframes slide-down-out{to{transform:translateY(100%);opacity:0}}
-    @keyframes slide-down-in{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+    #counter {
+      color: #fff;
+      font-family: 'Druk Wide Cy Web', sans-serif;
+      font-size: 6rem;
+      position: relative;
+      overflow: hidden;
+      line-height: 1;
+    }
 
-    .anim-up-out{animation:slide-up-out .3s ease forwards}
-    .anim-up-in{animation:slide-up-in .3s ease forwards}
-    .anim-down-out{animation:slide-down-out .3s ease forwards}
-    .anim-down-in{animation:slide-down-in .3s ease forwards}
+    .number {
+      display: inline-block;
+      position: relative;
+    }
+
+    #slash {
+      margin: 0 0.1em;
+    }
+
+    /* Slide animations */
+    .exit-up { animation: slideUp 0.4s forwards ease-in; }
+    .exit-down { animation: slideDown 0.4s forwards ease-in; }
+    .enter-bottom { animation: enterFromBottom 0.4s forwards ease-out; }
+    .enter-top { animation: enterFromTop 0.4s forwards ease-out; }
+
+    /* Threshold animations */
+    .threshold-move { animation: moveLeft 0.6s forwards ease-in-out; }
+    .pulse { animation: pulse 0.6s ease-in-out 10 alternate; }
+
+    /* Keyframes */
+    @keyframes slideUp {
+      from { transform: translateY(0); opacity: 1; }
+      to { transform: translateY(-100%); opacity: 0; }
+    }
+    @keyframes slideDown {
+      from { transform: translateY(0); opacity: 1; }
+      to { transform: translateY(100%); opacity: 0; }
+    }
+    @keyframes enterFromBottom {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes enterFromTop {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes moveLeft {
+      from { transform: translateX(0); }
+      to { transform: translateX(-1.2em); }
+    }
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.15); }
+    }
   </style>
 </head>
 <body>
-  <div id="counter-wrapper">
-    <div id="counter" class="counter-text">--/--</div>
+  <div id="counter">
+    <span id="current" class="number">0</span><span id="slash">/</span><span id="target" class="number">0</span>
   </div>
 
   <script>
-    const userLogin = "lildrey999";
-    const refreshIntervalMs = 100; // 100 мс
-    const apiUrlBase = `https://decapi.me/twitch/followcount/${userLogin}`;
+    /**
+     * Follower counter для канала lildrey999.
+     * 1. Основной источник – DecAPI: https://decapi.me/twitch/followcount/<channel> (plain‑text, без токена, CORS *).
+     * 2. Фолбек (если DecAPI не доступен) – IVR API: https://api.ivr.fi/v2/twitch/user?login=<channel> (JSON, CORS *).
+     * Обновление каждые 5 секунд, кэш браузера убивается query‑параметром.
+     */
 
-    const wrapper = document.getElementById("counter-wrapper");
-    let currentEl = document.getElementById("counter");
-    let prevCount = null;
+    const channel   = 'lildrey999';
+    const intervalMs = 5000;           // 5 секунд – Twitch не обновляет счёт быстрее
+    let currentCount = 0;
 
-    async function fetchFollowerCount(){
-      try{
-        // добавляем одноразовый query‑param, чтобы браузер точно не кешировал
-        const url = `${apiUrlBase}?_=${Date.now()}`;
-        const resp = await fetch(url,{cache:"no-store"});
-        const txt = await resp.text();
-        return parseInt(txt.trim(),10);
-      }catch(e){
-        console.error(e);
-        return null;
+    const currentEl = document.getElementById('current');
+    const targetEl  = document.getElementById('target');
+
+    const getTarget = cnt => Math.ceil(cnt / 100) * 100;
+
+    async function fetchCount() {
+      // --- 1‑й источник: DecAPI ---
+      try {
+        const res = await fetch(`https://decapi.me/twitch/followcount/${channel}?_=${Date.now()}`, {
+          cache: 'no-store'
+        });
+        if (res.ok) {
+          const txt = await res.text();
+          const num = parseInt(txt.replace(/\D/g, ''), 10);
+          if (!isNaN(num)) return num;
+        }
+        throw new Error('DecAPI failed');
+      } catch (e) {
+        // --- fallback: IVR.fi ---
+        try {
+          const res = await fetch(`https://api.ivr.fi/v2/twitch/user?login=${channel}&_=${Date.now()}`, {
+            cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length && data[0].followers !== undefined) {
+              return data[0].followers;
+            }
+          }
+        } catch (err) {
+          console.error('IVR.fi fallback failed', err);
+        }
+        return null; // обе попытки провалились
       }
     }
-    }
 
-    function formatCounter(cnt){
-      if(cnt===null) return "--/--";
-      const next = cnt%100===0?cnt+100:Math.ceil(cnt/100)*100;
-      return `${cnt}/${next}`;
-    }
+    function animateChange(newCount) {
+      if (newCount === currentCount || newCount == null) return;
 
-    function animateChange(newText, increment){
-      const outgoing = currentEl;
-      const incoming = document.createElement("div");
-      incoming.className = `counter-text ${increment?"anim-up-in":"anim-down-in"}`;
-      incoming.textContent = newText;
-      incoming.style.position="absolute";
-      incoming.style.left=0;
-      incoming.style.top=0;
+      const dirUp = newCount > currentCount;
+      const exitClass  = dirUp ? 'exit-up'    : 'exit-down';
+      const enterClass = dirUp ? 'enter-bottom' : 'enter-top';
 
-      outgoing.classList.add(increment?"anim-up-out":"anim-down-out");
+      const oldSpan = currentEl.cloneNode(true);
+      oldSpan.textContent = currentCount;
+      oldSpan.classList.add(exitClass);
+      currentEl.parentNode.insertBefore(oldSpan, currentEl);
 
-      wrapper.appendChild(incoming);
-      currentEl = incoming;
+      currentEl.textContent = newCount;
+      currentEl.classList.add(enterClass);
 
-      outgoing.addEventListener("animationend",()=>{
-        outgoing.remove();
-      },{once:true});
-    }
+      setTimeout(() => {
+        oldSpan.remove();
+        currentEl.classList.remove(enterClass);
+      }, 400);
 
-    async function update(){
-      const cnt = await fetchFollowerCount();
-      if(cnt===null) return;
-      const formatted = formatCounter(cnt);
+      currentCount = newCount;
 
-      if(prevCount===null){
-        currentEl.textContent = formatted;
-      }else if(cnt!==prevCount){
-        animateChange(formatted,cnt>prevCount);
+      const tgt = getTarget(currentCount);
+      if (parseInt(targetEl.textContent, 10) !== tgt) {
+        thresholdReached(tgt);
       }
-      prevCount = cnt;
     }
 
-    update();
-    setInterval(update,refreshIntervalMs);
+    function thresholdReached(tgt) {
+      targetEl.classList.add('threshold-move', 'pulse');
+      currentEl.classList.add('exit-up');
+
+      setTimeout(() => {
+        currentEl.textContent = tgt;
+        currentEl.classList.remove('exit-up');
+        targetEl.classList.remove('threshold-move', 'pulse');
+        currentCount = tgt;
+        targetEl.textContent = tgt + 100;
+      }, 5000);
+    }
+
+    async function updateLoop() {
+      const cnt = await fetchCount();
+      if (cnt != null) animateChange(cnt);
+    }
+
+    (async () => {
+      const start = await fetchCount();
+      if (start != null) {
+        currentCount = start;
+        currentEl.textContent = currentCount;
+        targetEl.textContent = getTarget(currentCount);
+      }
+      setInterval(updateLoop, intervalMs);
+    })();
   </script>
 </body>
 </html>
