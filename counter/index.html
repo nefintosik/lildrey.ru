@@ -29,32 +29,31 @@
       font-family: 'Druk Wide Cy Web', sans-serif;
       font-size: 6rem;
       position: relative;
-      overflow: hidden;               /* вертикально скрываем слайды */
+      overflow: hidden; /* vertical slide clipping */
       line-height: 1;
-      text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+      text-shadow: 0 3px 6px rgba(0,0,0,.6);
       display: inline-block;
-      /* ——— новинка ——— */
-      padding: 0 .4em .15em;          /* справа/слева даём место тени, снизу чуть «подрезаем» цифры */
+      padding: 0 .4em .15em; /* leave space for shadow & crop bottom a bit */
       box-sizing: content-box;
     }
 
-    .number { display:inline-block; position:relative; }
-    #slash  { margin:0 .1em; }
+    .number{display:inline-block;position:relative}
+    #slash{margin:0 .1em}
 
-    /* ------------ Анимации ------------- */
-    .exit-up      { animation: slideUp 0.35s cubic-bezier(.55,.06,.68,.19) forwards; }
-    .exit-down    { animation: slideDown 0.35s cubic-bezier(.32,.94,.6,.99) forwards; }
-    .enter-bottom { animation: enterFromBottom 0.35s cubic-bezier(.32,.94,.6,.99) forwards; }
-    .enter-top    { animation: enterFromTop 0.35s cubic-bezier(.55,.06,.68,.19) forwards; }
-    .threshold-move{ animation: moveLeft .55s ease-in-out forwards; }
-    .pulse         { animation: pulse .6s ease-in-out 10 alternate; }
+    /* Animations */
+    .exit-up{animation:slideUp .35s cubic-bezier(.55,.06,.68,.19) forwards}
+    .exit-down{animation:slideDown .35s cubic-bezier(.32,.94,.6,.99) forwards}
+    .enter-bottom{animation:enterFromBottom .35s cubic-bezier(.32,.94,.6,.99) forwards}
+    .enter-top{animation:enterFromTop .35s cubic-bezier(.55,.06,.68,.19) forwards}
+    .threshold-move{animation:moveLeft .55s ease-in-out forwards}
+    .pulse{animation:pulse .6s ease-in-out 10 alternate}
 
-    @keyframes slideUp      { to{transform:translateY(-100%);opacity:0;} }
-    @keyframes slideDown    { to{transform:translateY(100%);opacity:0;}  }
-    @keyframes enterFromBottom{ from{transform:translateY(100%);opacity:0;} }
-    @keyframes enterFromTop   { from{transform:translateY(-100%);opacity:0;} }
-    @keyframes moveLeft     { to{transform:translateX(-1.2em);} }
-    @keyframes pulse        { to{transform:scale(1.15);} }
+    @keyframes slideUp{to{transform:translateY(-100%);opacity:0}}
+    @keyframes slideDown{to{transform:translateY(100%);opacity:0}}
+    @keyframes enterFromBottom{from{transform:translateY(100%);opacity:0}}
+    @keyframes enterFromTop{from{transform:translateY(-100%);opacity:0}}
+    @keyframes moveLeft{to{transform:translateX(-1.2em)}}
+    @keyframes pulse{to{transform:scale(1.15)}}
   </style>
 </head>
 <body>
@@ -63,61 +62,119 @@
   </div>
 
   <script>
-    /* Follower‑counter для канала lildrey999 с минимальной задержкой (2 с). */
-    const channel='lildrey999', intervalMs=2000;
-    let currentCount=0;
-    const counterDiv=document.getElementById('counter'),currentEl=document.getElementById('current'),targetEl=document.getElementById('target');
-    const getTarget=c=>Math.ceil(c/100)*100;
+    // === CONFIG ===
+    const channel = 'lildrey999';
+    const intervalMs = 1500; // опрос каждые 1.5 с
 
-    async function fetchCount(){
-      try{
-        const r=await fetch(`https://mixerno.space/embed-count/twitch-user-counter/${channel}?_=${Date.now()}`,{cache:'no-store'});
-        if(r.ok){const n=Number((await r.text()).trim());if(Number.isFinite(n))return n;}
-        throw 0;
-      }catch{
-        try{
-          const r=await fetch(`https://decapi.me/twitch/followcount/${channel}?_=${Date.now()}`,{cache:'no-store'});
-          if(r.ok){const n=Number((await r.text()).trim());if(Number.isFinite(n))return n;}
-          throw 0;
-        }catch{
-          try{
-            const r=await fetch(`https://api.ivr.fi/v2/twitch/user?login=${channel}&_=${Date.now()}`,{cache:'no-store'});
-            if(r.ok){const j=await r.json();const f=Number(j?.[0]?.followers);if(Number.isFinite(f))return f;}
-          }catch{}
-          return null;
+    // === DOM ===
+    const counterDiv = document.getElementById('counter');
+    const currentEl  = document.getElementById('current');
+    const targetEl   = document.getElementById('target');
+
+    // === STATE ===
+    let currentCount = 0;
+    const recent = []; // для сглаживания всплесков
+
+    const getTarget = c => Math.ceil(c / 100) * 100;
+
+    // === API chain ===
+    async function fetchCount() {
+      /* 1) IVR.fi — JSON, CORS * (самая короткая задержка) */
+      try {
+        const r = await fetch(`https://api.ivr.fi/v2/twitch/user?login=${channel}&_=${Date.now()}`, { cache: 'no-store' });
+        if (r.ok) {
+          const data = await r.json();
+          const n = Number(data?.[0]?.followers);
+          if (Number.isFinite(n) && n >= 0) return n;
         }
+        throw new Error('IVR failed');
+      } catch {
+        /* 2) DecAPI (через allorigins, чтобы обойти CORS + кэш) */
+        try {
+          const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://decapi.me/twitch/followcount/${channel}`)}`;
+          const r = await fetch(`${proxy}&_=${Date.now()}`, { cache: 'no-store' });
+          if (r.ok) {
+            const n = parseInt((await r.text()).replace(/[^0-9]/g, ''), 10);
+            if (Number.isFinite(n) && n >= 0) return n;
+          }
+        } catch {/* ignore */}
+        return null;
       }
     }
 
-    function animateChange(newCount){
-      if(!Number.isFinite(newCount)||newCount===currentCount)return;
-      const dirUp=newCount>currentCount,exitC=dirUp?'exit-up':'exit-down',enterC=dirUp?'enter-bottom':'enter-top';
-      const old=document.createElement('span');
-      old.className=`number ${exitC}`;
-      old.textContent=currentCount;
-      old.style.position='absolute';old.style.left=currentEl.offsetLeft+'px';old.style.top=0;
-      counterDiv.appendChild(old);
-      currentEl.textContent=newCount;
-      currentEl.classList.add(enterC);
-      setTimeout(()=>{old.remove();currentEl.classList.remove(enterC);},350);
-      currentCount=newCount;
-      const tgt=getTarget(currentCount);
-      if(+targetEl.textContent!==tgt)threshold(tgt);
+    // === HELPERS ===
+    const pushRecent = v => { recent.push(v); if (recent.length > 3) recent.shift(); };
+    const stableValue = () => {
+      if (recent.length < 3) return recent[recent.length - 1];
+      const counts = {};
+      recent.forEach(x => counts[x] = (counts[x] || 0) + 1);
+      return +Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+    };
+
+    // === ANIMATIONS ===
+    function animateChange(newCount) {
+      if (!Number.isFinite(newCount) || newCount === currentCount) return;
+
+      const dirUp = newCount > currentCount;
+      const exitClass  = dirUp ? 'exit-up'      : 'exit-down';
+      const enterClass = dirUp ? 'enter-bottom' : 'enter-top';
+
+      // floating clone to avoid layout shift
+      const oldSpan = document.createElement('span');
+      oldSpan.className = `number ${exitClass}`;
+      oldSpan.textContent = currentCount;
+      const rect = currentEl.getBoundingClientRect();
+      oldSpan.style.position = 'absolute';
+      oldSpan.style.left = `${currentEl.offsetLeft}px`;
+      oldSpan.style.top  = `${currentEl.offsetTop}px`;
+      counterDiv.appendChild(oldSpan);
+
+      currentEl.textContent = newCount;
+      currentEl.classList.add(enterClass);
+
+      setTimeout(() => {
+        oldSpan.remove();
+        currentEl.classList.remove(enterClass);
+      }, 350);
+
+      currentCount = newCount;
+      const tgt = getTarget(currentCount);
+      if (+targetEl.textContent !== tgt) thresholdReached(tgt);
     }
 
-    function threshold(tgt){
-      targetEl.classList.add('threshold-move','pulse');
+    function thresholdReached(tgt) {
+      targetEl.classList.add('threshold-move', 'pulse');
       currentEl.classList.add('exit-up');
-      setTimeout(()=>{
-        currentEl.textContent=tgt;
+
+      setTimeout(() => {
+        currentEl.textContent = tgt;
         currentEl.classList.remove('exit-up');
-        targetEl.classList.remove('threshold-move','pulse');
-        currentCount=tgt;targetEl.textContent=tgt+100;
-      },5000);
+        targetEl.classList.remove('threshold-move', 'pulse');
+        currentCount = tgt;
+        targetEl.textContent = tgt + 100;
+      }, 5000);
     }
 
-    async function loop(){const n=await fetchCount();if(n!=null)animateChange(n);}  
-    (async()=>{const s=await fetchCount();if(s!=null){currentCount=s;currentEl.textContent=s;targetEl.textContent=getTarget(s);}setInterval(loop,intervalMs);} )();
+    // === LOOP ===
+    async function loop() {
+      const n = await fetchCount();
+      if (n != null) {
+        pushRecent(n);
+        const m = stableValue();
+        if (m !== currentCount) animateChange(m);
+      }
+    }
+
+    (async () => {
+      const start = await fetchCount();
+      if (start !=null) {
+        currentCount = start;
+        pushRecent(start);
+        currentEl.textContent = start;
+        targetEl.textContent  = getTarget(start);
+      }
+      setInterval(loop, intervalMs);
+    })();
   </script>
 </body>
 </html>
