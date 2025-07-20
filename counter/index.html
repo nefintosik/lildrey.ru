@@ -70,19 +70,23 @@
     const getTarget=c=>Math.ceil(c/100)*100;
 
     async function fetchCount(){
+      // 1) Mixerno — plain‑text but may include commas
       try{
         const r=await fetch(`https://mixerno.space/embed-count/twitch-user-counter/${channel}?_=${Date.now()}`,{cache:'no-store'});
-        if(r.ok){const n=Number((await r.text()).trim());if(Number.isFinite(n))return n;}
+        if(r.ok){const raw=await r.text();const n=parseInt(raw.replace(/[^0-9]/g,''),10);if(Number.isFinite(n)&&n>0)return n;}
         throw 0;
       }catch{
+        // 2) RapidAPI community endpoint via allorigins (no CORS) <optional>
         try{
-          const r=await fetch(`https://decapi.me/twitch/followcount/${channel}?_=${Date.now()}`,{cache:'no-store'});
-          if(r.ok){const n=Number((await r.text()).trim());if(Number.isFinite(n))return n;}
+          const proxy=`https://api.allorigins.win/raw?url=`+encodeURIComponent(`https://decapi.me/twitch/followcount/${channel}`);
+          const r=await fetch(`${proxy}&_=${Date.now()}`,{cache:'no-store'});
+          if(r.ok){const n=parseInt((await r.text()).replace(/[^0-9]/g,''),10);if(Number.isFinite(n)&&n>0)return n;}
           throw 0;
         }catch{
+          // 3) IVR fallback JSON
           try{
             const r=await fetch(`https://api.ivr.fi/v2/twitch/user?login=${channel}&_=${Date.now()}`,{cache:'no-store'});
-            if(r.ok){const j=await r.json();const f=Number(j?.[0]?.followers);if(Number.isFinite(f))return f;}
+            if(r.ok){const j=await r.json();const f=Number(j?.[0]?.followers);if(Number.isFinite(f)&&f>0)return f;}
           }catch{}
           return null;
         }
